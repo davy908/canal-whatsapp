@@ -35,7 +35,7 @@ def test_ferramentas_existentes():
     nomes = {f.name for f in ferramentas(None)}
     assert nomes == {
         "whatsapp_status", "whatsapp_qr", "whatsapp_listar_mensagens",
-        "whatsapp_enviar", "whatsapp_envios", "whatsapp_cancelar_envio",
+        "whatsapp_enviar", "whatsapp_envios", "whatsapp_cancelar_envio", "whatsapp_pedidos_novos",
     }
 
 
@@ -52,7 +52,18 @@ def test_leitura_so_faz_get_e_envio_so_posta_nos_dois_caminhos():
     assert {metodo for metodo, _ in pedidos} == {"GET"}
     fonte = inspect.getsource(mcp_whatsapp)
     assert ".delete(" not in fonte and ".put(" not in fonte
-    assert set(re.findall(r'postar\("([^"]+)"', fonte)) == {"/api/enviar", "/api/cancelar"}
+    assert set(re.findall(r'postar\("([^"]+)"', fonte)) == {"/api/enviar", "/api/cancelar", "/api/pedidos/pegar"}
+
+
+def test_pedidos_novos():
+    def resposta(pedido):
+        assert (pedido.method, pedido.url.path) == ("POST", "/api/pedidos/pegar")
+        return httpx.Response(200, json={"pedidos": [{"id": 12, "recebida_em": "2030-01-02T12:00:00+00:00", "tipo": "texto", "texto": "Claude, resume \"isso\""}]})
+
+    saida = textos(chamar(cliente_com(resposta), "whatsapp_pedidos_novos"))
+    assert "#12 às 02/01 09:00" in saida and '"Claude, resume \\"isso\\""' in saida
+    vazio = textos(chamar(cliente_com(lambda _: httpx.Response(200, json={"pedidos": []})), "whatsapp_pedidos_novos"))
+    assert vazio == "Nenhum pedido novo."
 
 
 def test_destino_e_so_um_nome_nunca_um_numero():

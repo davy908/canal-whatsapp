@@ -12,6 +12,15 @@ O Claude escolhe só "davy" ou "instinct", então não tem como mandar mensagem 
 
 Ficam de fora: o que você manda para outras pessoas, grupos, status, histórico antigo e arquivos.
 
+## Pedir coisas ao Claude pelo celular
+
+Na conversa **"Você"** do WhatsApp, escreva começando com **Claude**, por exemplo:
+"Claude, me manda o resumo dos pedidos de ontem". Cada pedido sai uma vez só.
+
+Uma tarefa agendada no app do Claude (neste computador) confere de tempos em tempos e faz o pedido.
+Ela só funciona com o computador ligado e o app aberto. O resto da conversa "Você" continua sendo
+anotação sua, e mensagem de outra pessoa ou do Instinct nunca vira pedido.
+
 ## O que acontece quando chega uma mensagem
 
 1. O Evolution avisa este serviço, que roda na VPS.

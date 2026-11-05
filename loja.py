@@ -56,6 +56,10 @@ class Loja:
             for nome, definicao in _COLUNAS_NOVAS.items():
                 if nome not in existentes:
                     banco.execute(f"ALTER TABLE mensagens ADD COLUMN {nome} {definicao}")
+            # Começa depois do que já existe: nota antiga na conversa "Você" não vira pedido de repente.
+            banco.execute(
+                "INSERT OR IGNORE INTO ajustes (nome, valor) SELECT 'cursor_pedidos', COALESCE(MAX(seq), 0) FROM mensagens"
+            )
         os.chmod(caminho, 0o600)
 
     def _conexao(self) -> sqlite3.Connection:
@@ -99,6 +103,22 @@ class Loja:
                 (ENVIADA, FALHOU, CANCELADA, corte),
             )
             return banco.execute("DELETE FROM mensagens WHERE recebida_em < ?", (corte,)).rowcount
+
+    def pegar_do_davy_depois_do_cursor(self) -> list[dict]:
+        """Mensagens digitadas pelo Davy desde a última vez, e avança o cursor: cada uma sai uma vez só.
+
+        Avança antes de alguém agir: se a tarefa cair no meio, o pedido se perde em vez de rodar duas vezes.
+        """
+        with self._conexao() as banco:
+            banco.execute("BEGIN IMMEDIATE")  # duas tarefas ao mesmo tempo não pegam o mesmo pedido
+            cursor = int(banco.execute("SELECT valor FROM ajustes WHERE nome = 'cursor_pedidos'").fetchone()["valor"])
+            linhas = banco.execute(
+                "SELECT seq, recebida_em, tipo, texto, conversa FROM mensagens WHERE origem = 'davy' AND seq > ? ORDER BY seq",
+                (cursor,),
+            ).fetchall()
+            ultimo = banco.execute("SELECT COALESCE(MAX(seq), 0) AS ultimo FROM mensagens").fetchone()["ultimo"]
+            banco.execute("UPDATE ajustes SET valor = ? WHERE nome = 'cursor_pedidos'", (str(max(cursor, ultimo)),))
+        return [dict(linha) for linha in linhas]
 
     # --- envios agendados ---
 

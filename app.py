@@ -11,6 +11,7 @@ import binascii
 import hmac
 import json
 import logging
+import re
 import secrets
 import threading
 import time
@@ -51,6 +52,9 @@ INTERVALO_FILA_SEGUNDOS = 15
 INTERVALO_LIMPEZA_SEGUNDOS = 3600
 ATRASO_MAXIMO_SEGUNDOS = 86400  # desconectado por mais de um dia: o aviso agendado vira "falhou"
 AGENDAMENTO_MAXIMO_SEGUNDOS = 366 * 86400
+
+
+_PEDIDO = re.compile(r"\s*claude\b", re.IGNORECASE)  # o resto da conversa "Você" é anotação, não pedido
 
 
 class PedidoInvalido(ValueError):
@@ -197,6 +201,24 @@ class Canal:
             "proxima_pagina": proxima,
         }
 
+    # --- pedidos ---
+
+    def pegar_pedidos(self) -> dict:
+        """Pedidos novos do Davy: só na conversa dele com ele mesmo e começando com "Claude"."""
+        pedidos = [
+            {
+                "id": linha["seq"],
+                "recebida_em": datetime.fromtimestamp(linha["recebida_em"], timezone.utc).isoformat(),
+                "tipo": linha["tipo"],
+                "texto": linha["texto"],
+            }
+            for linha in self._loja.pegar_do_davy_depois_do_cursor()
+            if numeros_iguais(linha["conversa"], self._config.numero_esperado) and _PEDIDO.match(linha["texto"])
+        ]
+        if pedidos:
+            log.info("pedidos_entregues quantidade=%s", len(pedidos))
+        return {"pedidos": pedidos}
+
     # --- envio ---
 
     def enviar(self, para: object, texto: object, enviar_em: object) -> dict:
@@ -207,6 +229,8 @@ class Canal:
         limpo = limpar_texto(texto, TAMANHO_MAXIMO_TEXTO)
         if not limpo or not isinstance(texto, str) or len(texto.strip()) > TAMANHO_MAXIMO_TEXTO:
             raise PedidoInvalido(f"texto vazio ou com mais de {TAMANHO_MAXIMO_TEXTO} caracteres")
+        if para == "davy" and _PEDIDO.match(limpo):
+            limpo = "🤖 " + limpo  # resposta do Claude nunca pode parecer um pedido novo do Davy
         agora = self.agora()
         if enviar_em is None:
             quando = agora
@@ -399,6 +423,9 @@ def criar_app(config: Config, evolution: Evolution, relogio=time.time) -> Starle
     def agendadas(_: Request) -> Response:
         return JSONResponse(canal.agendadas())
 
+    def pegar_pedidos(_: Request) -> Response:
+        return JSONResponse(canal.pegar_pedidos())
+
     def _so_davy(funcao):
         def rota(pedido: Request) -> Response:
             if not _basic_confere(pedido, config.senha_painel):
@@ -461,6 +488,7 @@ def criar_app(config: Config, evolution: Evolution, relogio=time.time) -> Starle
             Route("/api/qr", _so_leitura(api_qr)),
             Route("/api/mensagens", _so_leitura(api_mensagens)),
             Route("/api/agendadas", _so_leitura(agendadas)),
+            Route("/api/pedidos/pegar", _so_leitura(pegar_pedidos), methods=["POST"]),
             Route("/api/enviar", _do_claude(enviar), methods=["POST"]),
             Route("/api/cancelar", _do_claude(cancelar), methods=["POST"]),
             Route("/painel", _so_davy(painel)),
