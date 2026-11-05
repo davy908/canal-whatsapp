@@ -1,0 +1,16 @@
+# Serviço da VPS. O wrapper do Claude (mcp_whatsapp.py) declara as dependências dele dentro do arquivo.
+[project]
+name = "canal-whatsapp"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["starlette>=0.48", "uvicorn>=0.34", "httpx==0.28.1"]  # versões exatas em uv.lock e requirements.txt
+
+[dependency-groups]
+dev = ["pytest", "mcp==2.3.0"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
