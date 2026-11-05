@@ -17,9 +17,24 @@ Ficam de fora: o que você manda para outras pessoas, grupos, status, histórico
 Na conversa **"Você"** do WhatsApp, escreva começando com **Claude**, por exemplo:
 "Claude, me manda o resumo dos pedidos de ontem". Cada pedido sai uma vez só.
 
-Uma tarefa agendada no app do Claude (neste computador) confere de tempos em tempos e faz o pedido.
-Ela só funciona com o computador ligado e o app aberto. O resto da conversa "Você" continua sendo
-anotação sua, e mensagem de outra pessoa ou do Instinct nunca vira pedido.
+Quem atende é o **canal**: uma conversa do Claude aberta numa janela de terminal, que recebe o pedido em
+poucos segundos e responde na conversa "Você". Para abrir (deixe a janela aberta, pode minimizar):
+
+```bash
+powershell -ExecutionPolicy Bypass -File canal-whatsapp\canal_claude\abrir_canal.ps1
+```
+
+- Na primeira vez, o Claude pergunta três coisas na janela: se confia na pasta, se pode usar o servidor
+  "whatsapp" e se aceita o canal em teste. Responda que sim.
+- Quando o Claude precisar de aprovação, ela chega no WhatsApp com um código. Responda
+  `Claude sim abcde` ou `Claude não abcde`. Também dá para aprovar na própria janela.
+- Para o celular tocar quando ele terminar, o Claude manda um aviso curto ao Instinct.
+- Janela fechada ou computador desligado: os pedidos esperam na VPS e são atendidos quando você abrir de novo.
+- O canal é um recurso em teste do Claude Code e pode mudar. Precisa do Claude Code 2.1.234 ou mais novo
+  para as aprovações irem ao WhatsApp (`claude update`).
+
+O resto da conversa "Você" continua sendo anotação sua, e mensagem de outra pessoa ou do Instinct nunca
+vira pedido. Quem estiver com o seu celular desbloqueado consegue pedir e aprovar: cuide dele.
 
 ## O que acontece quando chega uma mensagem
 
