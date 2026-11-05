@@ -99,3 +99,21 @@ def test_compara_numero_com_e_sem_nono_digito():
     assert numeros_iguais("5511988887777:12@s.whatsapp.net", "5511988887777")
     assert not numeros_iguais("5511988887777", "5511988887778")
     assert not numeros_iguais("", "")
+
+
+def test_saida_do_davy_so_nas_conversas_combinadas():
+    combinadas = ("5511988887777", "16508702892")
+    proprio = aviso(key={"remoteJid": "551188887777@s.whatsapp.net", "fromMe": True, "id": "X"})
+    m = extrair_recebida(proprio, AGORA, numero_do_davy="5511988887777", conversas_do_davy=combinadas)
+    assert (m.origem, m.remetente, m.nome_informado, m.conversa) == ("davy", "+5511988887777", "Davy", "+551188887777")
+    outra = aviso(key={"remoteJid": "5511977776666@s.whatsapp.net", "fromMe": True, "id": "Y"})
+    assert extrair_recebida(outra, AGORA, numero_do_davy="5511988887777", conversas_do_davy=combinadas) is None
+
+
+def test_saida_do_davy_com_identificador_oculto_usa_o_numero_real():
+    combinadas = ("5511988887777",)
+    com = {"remoteJid": "123@lid", "fromMe": True, "id": "Z", "remoteJidAlt": "5511988887777@s.whatsapp.net"}
+    m = extrair_recebida(aviso(key=com), AGORA, numero_do_davy="5511988887777", conversas_do_davy=combinadas)
+    assert m is not None and m.origem == "davy"
+    sem = {"remoteJid": "123@lid", "fromMe": True, "id": "W"}
+    assert extrair_recebida(aviso(key=sem), AGORA, numero_do_davy="5511988887777", conversas_do_davy=combinadas) is None

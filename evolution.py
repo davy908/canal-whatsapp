@@ -1,8 +1,8 @@
 """Conversa com o Evolution 2.3.7, sempre e só sobre a instância `canal-ia`.
 
 O nome da instância é fixo no código para este serviço nunca alcançar a instância de outro uso. A
-chave é a da própria instância: mesmo vazando, ela não abre as outras. Não existe caminho de envio
-aqui, de propósito: um teste confere a lista completa de caminhos usados.
+chave é a da própria instância: mesmo vazando, ela não abre as outras. O único envio é texto, e
+quem decide o número é o serviço (só o Davy e o Instinct): um teste confere a lista de caminhos.
 """
 import httpx
 
@@ -111,6 +111,16 @@ class Evolution:
         if not isinstance(imagem, str) or not imagem:
             return None
         return imagem if imagem.startswith("data:image/") else f"data:image/png;base64,{imagem}"
+
+    def enviar_texto(self, numero: str, texto: str) -> str | None:
+        """Envia um texto e devolve o id da mensagem no WhatsApp. Erro vira EvolutionFora."""
+        resposta = self._pedir("POST", f"/message/sendText/{INSTANCIA}", json={"number": numero, "text": texto})
+        if not resposta.is_success:
+            raise EvolutionFora(f"HTTP {resposta.status_code}")
+        dados = _json(resposta)
+        chave = dados.get("key") if isinstance(dados, dict) else None
+        id_mensagem = chave.get("id") if isinstance(chave, dict) else None
+        return id_mensagem if isinstance(id_mensagem, str) and id_mensagem else None
 
     def desconectar(self) -> None:
         """Desliga o número da instância. Já desligado responde erro 400, e isso não é falha."""

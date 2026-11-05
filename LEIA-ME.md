@@ -1,15 +1,30 @@
-# Canal de WhatsApp (só leitura)
+# Canal de WhatsApp
 
-O Claude consegue ver se um número está conectado, pegar o QR e ler as mensagens que esse número recebe.
-Ele **não consegue enviar nada**: essa ferramenta não existe aqui.
+O Claude consegue ver se o número está conectado, pegar o QR, ler mensagens e enviar texto.
+**Ele só envia para dois destinos: para você mesmo e para o Instinct.** O número de cada um fica na VPS.
+O Claude escolhe só "davy" ou "instinct", então não tem como mandar mensagem para mais ninguém.
+
+## O que o Claude lê
+
+- Mensagens que outras pessoas mandam para o seu número.
+- A sua conversa com você mesmo (a conversa "Você" no WhatsApp).
+- A conversa com o Instinct: o que você manda, o que ele responde e o que o Claude enviou.
+
+Ficam de fora: o que você manda para outras pessoas, grupos, status, histórico antigo e arquivos.
 
 ## O que acontece quando chega uma mensagem
 
 1. O Evolution avisa este serviço, que roda na VPS.
 2. O serviço guarda só o remetente, o nome informado, o horário, o tipo e o texto ou a legenda.
-3. O Claude lê quando for pedido, com um aviso de que aquilo foi escrito por outra pessoa.
+3. O Claude lê quando for pedido. Cada mensagem vem marcada pela origem: `externo` (outra pessoa ou o
+   Instinct), `davy` (digitada no seu celular) ou `claude` (enviada pelo Claude).
 
-Ficam de fora: grupos, status, mensagens enviadas pelo próprio número, histórico antigo e arquivos.
+## Envios
+
+O Claude envia na hora ou agenda para um horário (horário de Brasília). Quem envia é a VPS, então
+funciona com o computador desligado. No painel aparecem os envios, com um botão para cancelar os
+agendados. Se o número estiver desconectado na hora, o envio espera; depois de um dia, desiste e
+aparece como "Não foi enviado".
 
 As mensagens são apagadas sozinhas depois de **7 dias**. O serviço guarda no máximo 5.000.
 Se outro número escanear o QR, o serviço desconecta e não guarda nada.
@@ -44,6 +59,8 @@ CANAL_SENHA_PAINEL=(copiada pelo programa)
 CANAL_NUMERO_ESPERADO=(o número que vai conectar, com 55 e DDD)
 CANAL_DIAS_GUARDA=7
 ```
+
+O número do Instinct já vem no código. Para trocar, coloque `CANAL_NUMERO_INSTINCT` com DDI e DDD.
 
 Depois, clique em **Implantar**.
 
@@ -95,12 +112,14 @@ powershell -ExecutionPolicy Bypass -File canal-whatsapp\instalar_mcp.ps1 -Remove
 | O Evolution não respondeu, ou a chave está errada | Veja se o `evolution-api` está no ar e confira a chave |
 | Número diferente do combinado | Escaneie com o número certo, ou corrija `CANAL_NUMERO_ESPERADO` |
 
-Se a chave de leitura vazar, rode `preparar_chaves.ps1` de novo, cole as novas no EasyPanel e implante.
+Se a chave do canal vazar, rode `preparar_chaves.ps1` de novo, cole as novas no EasyPanel e implante.
 
 ## Cuidados que continuam valendo
 
 - **Banimento:** o Evolution não é oficial, e o WhatsApp pode banir o número.
 - **Mensagem é conteúdo de estranho:** qualquer pessoa pode escrever um texto tentando enganar o Claude. As mensagens vêm marcadas e o serviço não age por elas, mas o Claude pode ter outras ferramentas na mesma conversa. Se ele disser que uma mensagem pede algo, é você quem decide.
+- **O que vai para o Instinct sai daqui:** o Instinct é um serviço de fora. Tudo o que o Claude manda para ele passa a estar lá.
+- **A chave do canal agora também envia:** quem tiver `CANAL_WHATSAPP_CHAVE` pode mandar mensagem, mas só para você e para o Instinct.
 
 ## Para quem for mexer no código
 

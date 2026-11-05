@@ -25,6 +25,7 @@ JID = "551188887777@s.whatsapp.net"
 QR_PNG = base64.b64encode(b"\x89PNG-qr-de-mentira").decode()
 LEITURA = {"Authorization": f"Bearer {CHAVE_LEITURA}"}
 ORIGEM = {"Origin": "http://testserver"}
+INSTINCT = "16508702892"
 
 
 class EvolutionDeMentira:
@@ -34,7 +35,9 @@ class EvolutionDeMentira:
         self.outras_instancias = False
         self.existe = True
         self.fora_do_ar = False
+        self.envio_recusado = False
         self.chamadas = []
+        self.enviadas = []
 
     def __call__(self, pedido: httpx.Request) -> httpx.Response:
         caminho = pedido.url.path
@@ -56,6 +59,12 @@ class EvolutionDeMentira:
             return httpx.Response(200, json={"code": "2@x", "base64": f"data:image/png;base64,{QR_PNG}", "count": 1})
         if caminho in ("/webhook/set/canal-ia", "/settings/set/canal-ia"):
             return httpx.Response(201, json={"ok": True})
+        if caminho == "/message/sendText/canal-ia":
+            if self.envio_recusado:
+                return httpx.Response(400, json={"message": "recusado"})
+            corpo = json.loads(pedido.content)
+            self.enviadas.append((corpo["number"], corpo["text"]))
+            return httpx.Response(201, json={"key": {"remoteJid": corpo["number"] + "@s.whatsapp.net", "fromMe": True, "id": f"ENV{len(self.enviadas)}"}})
         if caminho == "/instance/logout/canal-ia":
             self.estado = "close"
             self.dono = None
@@ -79,13 +88,19 @@ def config(tmp_path):
         url_webhook="http://canal:8000/webhook/evolution",
         caminho_banco=str(tmp_path / "canal.db"),
         dias_guarda=7,
+        numero_instinct=INSTINCT,
     )
 
 
 @pytest.fixture
-def cliente(evo, config):
+def hora():
+    return [AGORA]
+
+
+@pytest.fixture
+def cliente(evo, config, hora):
     evolution = Evolution(config.evolution_url, config.evolution_token, httpx.MockTransport(evo))
-    with TestClient(criar_app(config, evolution, relogio=lambda: AGORA)) as c:
+    with TestClient(criar_app(config, evolution, relogio=lambda: hora[0])) as c:
         yield c
 
 
@@ -158,9 +173,12 @@ def test_metodos_errados_sao_recusados(cliente, metodo, rota):
     assert getattr(cliente, metodo)(rota).status_code == 405
 
 
-def test_nao_existe_rota_de_envio():
-    fonte = inspect.getsource(modulo_app)
-    assert "/enviar" not in fonte and "sendText" not in fonte and "/message/" not in fonte
+def test_envio_exige_a_chave_do_canal(cliente, evo):
+    corpo = {"para": "instinct", "texto": "oi"}
+    assert cliente.post("/api/enviar", json=corpo).status_code == 401
+    assert cliente.post("/api/enviar", json=corpo, auth=("davy", SENHA_PAINEL)).status_code == 401
+    assert cliente.post("/api/cancelar", json={"id": 1}).status_code == 401
+    assert evo.enviadas == []
 
 
 # --- webhook ---
@@ -347,13 +365,15 @@ def test_servico_so_toca_a_propria_instancia(cliente, config, evo):
         ("POST", "/webhook/set/canal-ia"),
         ("POST", "/settings/set/canal-ia"),
         ("DELETE", "/instance/logout/canal-ia"),
+        ("POST", "/message/sendText/canal-ia"),
     }
     assert {(metodo, caminho) for metodo, caminho, _ in evo.chamadas} <= permitidos
 
 
-def test_codigo_do_evolution_nao_tem_caminho_de_envio():
+def test_evolution_so_envia_texto_e_nao_mexe_em_instancias():
     fonte = inspect.getsource(modulo_evolution)
-    for proibido in ("/message/", "sendText", "/instance/delete", "/instance/restart", "/instance/create", "/chat/"):
+    assert fonte.count("/message/") == 1 and "/message/sendText/" in fonte
+    for proibido in ("/instance/delete", "/instance/restart", "/instance/create", "/chat/", "sendMedia", "/group/"):
         assert proibido not in fonte
 
 

@@ -1,4 +1,7 @@
-"""A página do Davy. Mostra só estado e QR, nunca mensagem: conteúdo de fora não entra nesta página."""
+"""A página do Davy: estado, QR e os envios agendados pelo Claude.
+
+Mensagem recebida nunca entra nesta página. O texto dos envios entra só por textContent, nunca como HTML.
+"""
 
 PAGINA_PAINEL = """<!doctype html>
 <html lang="pt-BR">
@@ -21,12 +24,17 @@ PAGINA_PAINEL = """<!doctype html>
   #mostrar { background: var(--verde); border-color: var(--verde); color: #fff; width: 100%; }
   .acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; border-top: 1px solid var(--borda); padding-top: 16px; }
   form { margin: 0; }
+  h2 { font-size: 16px; margin: 20px 0 8px; border-top: 1px solid var(--borda); padding-top: 16px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { border: 1px solid var(--borda); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+  li .texto { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0; }
+  li button { padding: 6px 10px; font-size: 14px; }
 </style>
 </head>
 <body>
 <main>
   <h1>Canal WhatsApp</h1>
-  <p class="suave">Só leitura: daqui nada é enviado.</p>
+  <p class="suave">Lê as mensagens e envia só para você e para o Instinct.</p>
   <p id="estado">Conferindo...</p>
   <p id="numero" class="suave"></p>
   <button id="mostrar" type="button" hidden>Mostrar QR para conectar</button>
@@ -37,6 +45,9 @@ PAGINA_PAINEL = """<!doctype html>
     <form method="post" action="/painel/desconectar" data-pergunta="Desconectar o número deste serviço?"><button type="submit">Desconectar</button></form>
     <form method="post" action="/painel/apagar" data-pergunta="Apagar todas as mensagens guardadas? Não dá para desfazer."><button type="submit">Apagar mensagens</button></form>
   </div>
+  <h2>Envios do Claude</h2>
+  <p id="sem-envios" class="suave">Nenhum envio agendado.</p>
+  <ul id="envios"></ul>
 </main>
 <script nonce="__NONCE__">
   const TEXTOS = {
@@ -84,6 +95,41 @@ PAGINA_PAINEL = """<!doctype html>
     mostrarEstado(dados);
   }
 
+  const DESTINOS = { davy: "Para você", instinct: "Para o Instinct" };
+  const ESTADOS = { pendente: "Agendado", enviando: "Enviando", enviada: "Enviado", falhou: "Não foi enviado", cancelada: "Cancelado" };
+  const HORA = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+
+  function linhaDeEnvio(envio) {
+    const item = document.createElement("li");
+    const cabeca = document.createElement("div");
+    cabeca.className = "suave";
+    cabeca.textContent = (DESTINOS[envio.para] || envio.para) + " · " + HORA.format(new Date(envio.enviar_em)) + " · " + (ESTADOS[envio.estado] || envio.estado);
+    const texto = document.createElement("p");
+    texto.className = "texto";
+    texto.textContent = envio.texto;
+    item.append(cabeca, texto);
+    if (envio.estado === "pendente") {
+      const botao = document.createElement("button");
+      botao.type = "button";
+      botao.textContent = "Cancelar envio";
+      botao.addEventListener("click", async () => {
+        if (!window.confirm("Cancelar este envio?")) return;
+        await fetch("/painel/cancelar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: envio.id }) });
+        atualizarEnvios();
+      });
+      item.append(botao);
+    }
+    return item;
+  }
+
+  async function atualizarEnvios() {
+    const resposta = await fetch("/painel/agendadas");
+    if (!resposta.ok) return;
+    const { agendadas } = await resposta.json();
+    el("envios").replaceChildren(...agendadas.map(linhaDeEnvio));
+    el("sem-envios").hidden = agendadas.length > 0;
+  }
+
   el("mostrar").addEventListener("click", () => {
     pedindoQr = true;
     el("mostrar").hidden = true;
@@ -95,7 +141,9 @@ PAGINA_PAINEL = """<!doctype html>
     });
   });
   atualizar();
+  atualizarEnvios();
   setInterval(atualizar, 5000);
+  setInterval(atualizarEnvios, 15000);
 </script>
 </body>
 </html>

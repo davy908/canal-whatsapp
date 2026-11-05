@@ -82,3 +82,36 @@ def test_apagar_mensagens_nao_troca_o_segredo(tmp_path):
     segredo = loja.segredo_webhook()
     loja.apagar_tudo()
     assert loja.segredo_webhook() == segredo
+
+
+def test_banco_da_versao_antiga_ganha_as_colunas_novas(tmp_path):
+    caminho = tmp_path / "canal.db"
+    with sqlite3.connect(caminho) as banco:
+        banco.execute(
+            "CREATE TABLE mensagens (seq INTEGER PRIMARY KEY AUTOINCREMENT, id_evolution TEXT NOT NULL UNIQUE,"
+            " recebida_em INTEGER NOT NULL, remetente TEXT NOT NULL, nome_informado TEXT NOT NULL,"
+            " tipo TEXT NOT NULL, texto TEXT NOT NULL)"
+        )
+        banco.execute("INSERT INTO mensagens VALUES (1, 'V', ?, '+55', 'N', 'texto', 'antiga')", (AGORA,))
+    banco.close()
+    loja = Loja(str(caminho), 7)
+    [linha], _ = loja.listar(AGORA, 10)
+    assert (linha["texto"], linha["origem"], linha["conversa"]) == ("antiga", "externo", "")
+    Loja(str(caminho), 7)  # abrir de novo não tenta criar a coluna outra vez
+
+
+def test_envio_pego_uma_vez_so(tmp_path):
+    loja = nova_loja(tmp_path)
+    loja.agendar("instinct", "oi", AGORA, AGORA)
+    assert len(loja.pegar_para_enviar(AGORA)) == 1
+    assert loja.pegar_para_enviar(AGORA) == []  # ficou "enviando": queda no meio não repete o envio
+    assert not loja.ha_vencida(AGORA)
+
+
+def test_limpeza_tira_envios_antigos_e_deixa_os_pendentes(tmp_path):
+    loja = nova_loja(tmp_path)
+    feito = loja.agendar("davy", "feito", AGORA, AGORA)
+    loja.marcar(feito, modulo_loja.ENVIADA, AGORA)
+    pendente = loja.agendar("davy", "longe", AGORA + 30 * DIA, AGORA)
+    loja.apagar_vencidas(AGORA + 8 * DIA)
+    assert [e["id"] for e in loja.listar_agendadas()] == [pendente]

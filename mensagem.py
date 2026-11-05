@@ -1,12 +1,18 @@
-"""Traduz o aviso do Evolution em uma mensagem recebida, guardando só o mínimo.
+"""Traduz o aviso do Evolution em uma mensagem guardada, só com o mínimo.
 
 O aviso traz a chave da instância no campo `apikey` e a mensagem inteira em `data`. Por isso nada
 do aviso bruto é guardado ou registrado: só os campos abaixo saem daqui. O conteúdo nunca decide
 nada no sistema; ele só é limpo, cortado e guardado.
+
+O que sai do número do Davy só é guardado nas conversas combinadas (com ele mesmo e com o
+Instinct): o resto do que ele manda para outras pessoas continua fora.
 """
+import logging
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
+
+log = logging.getLogger("canal-whatsapp")
 
 INSTANCIA = "canal-ia"
 TAMANHO_MAXIMO_TEXTO = 4000
@@ -24,6 +30,11 @@ _CONVERSA_DE_GRUPO_OU_LISTA = ("@g.us", "@broadcast", "@newsletter")
 _JUNTA_EMOJI = {"‌", "‍"}  # sem eles, emoji composto quebra; são os únicos invisíveis mantidos
 
 
+ORIGEM_EXTERNA = "externo"  # qualquer outra pessoa ou robô, inclusive o Instinct
+ORIGEM_DAVY = "davy"  # digitado no celular do Davy
+ORIGEM_CLAUDE = "claude"  # enviado por este serviço, a pedido do Claude
+
+
 @dataclass(frozen=True)
 class MensagemRecebida:
     id_evolution: str
@@ -32,6 +43,8 @@ class MensagemRecebida:
     nome_informado: str
     tipo: str
     texto: str
+    origem: str = ORIGEM_EXTERNA
+    conversa: str = ""  # com quem é a conversa: "+número"
 
 
 def limpar_texto(bruto: object, limite: int) -> str:
@@ -102,8 +115,17 @@ def _instante(dados: dict, agora: int) -> int:
     return agora
 
 
-def extrair_recebida(aviso: dict, agora: int | None = None) -> MensagemRecebida | None:
-    """Devolve a mensagem que merece ser guardada, ou None para o resto (enviadas, grupos, status)."""
+def extrair_recebida(
+    aviso: dict,
+    agora: int | None = None,
+    numero_do_davy: str = "",
+    conversas_do_davy: tuple[str, ...] = (),
+) -> MensagemRecebida | None:
+    """Devolve a mensagem que merece ser guardada, ou None para o resto (grupos, status, outras conversas).
+
+    Recebida: guarda de qualquer pessoa. Saída do número do Davy: só se a conversa estiver em
+    `conversas_do_davy` (ele mesmo e o Instinct).
+    """
     agora = int(datetime.now(timezone.utc).timestamp()) if agora is None else agora
     if aviso.get("event") != "messages.upsert" or aviso.get("instance") != INSTANCIA:
         return None
@@ -111,13 +133,23 @@ def extrair_recebida(aviso: dict, agora: int | None = None) -> MensagemRecebida 
     if not isinstance(dados, dict):
         return None
     chave = dados.get("key")
-    if not isinstance(chave, dict) or chave.get("fromMe") is not False:
+    if not isinstance(chave, dict) or not isinstance(chave.get("fromMe"), bool):
         return None
     conversa, id_evolution = chave.get("remoteJid"), chave.get("id")
     if not isinstance(conversa, str) or not isinstance(id_evolution, str) or not id_evolution:
         return None
     if conversa.endswith(_CONVERSA_DE_GRUPO_OU_LISTA) or not _so_digitos(conversa):
         return None
+    com_quem = _remetente(chave, conversa)
+    if chave["fromMe"]:
+        if not any(numeros_iguais(com_quem, numero) for numero in conversas_do_davy):
+            # Sem conteúdo no registro: só o tipo de endereço, para entender um @lid que não casou.
+            log.info("saida_ignorada endereco=%s", conversa.rpartition("@")[2])
+            return None
+        origem, remetente, nome = ORIGEM_DAVY, "+" + _so_digitos(numero_do_davy), "Davy"
+    else:
+        origem, remetente = ORIGEM_EXTERNA, com_quem
+        nome = limpar_texto(dados.get("pushName"), TAMANHO_MAXIMO_NOME)
     conteudo = _tipo_e_texto(dados)
     if conteudo is None:
         return None
@@ -125,8 +157,10 @@ def extrair_recebida(aviso: dict, agora: int | None = None) -> MensagemRecebida 
     return MensagemRecebida(
         id_evolution=id_evolution[:128],
         recebida_em=_instante(dados, agora),
-        remetente=_remetente(chave, conversa),
-        nome_informado=limpar_texto(dados.get("pushName"), TAMANHO_MAXIMO_NOME),
+        remetente=remetente,
+        nome_informado=nome,
         tipo=tipo,
         texto=texto,
+        origem=origem,
+        conversa=com_quem,
     )

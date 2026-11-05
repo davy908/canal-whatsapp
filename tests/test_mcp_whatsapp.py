@@ -31,24 +31,80 @@ def textos(resultado):
     return "\n".join(b.text for b in blocos if getattr(b, "type", "") == "text")
 
 
-def test_so_existem_as_tres_ferramentas_de_leitura():
+def test_ferramentas_existentes():
     nomes = {f.name for f in ferramentas(None)}
-    assert nomes == {"whatsapp_status", "whatsapp_qr", "whatsapp_listar_mensagens"}
+    assert nomes == {
+        "whatsapp_status", "whatsapp_qr", "whatsapp_listar_mensagens",
+        "whatsapp_enviar", "whatsapp_envios", "whatsapp_cancelar_envio",
+    }
 
 
-def test_o_wrapper_so_faz_get():
+def test_leitura_so_faz_get_e_envio_so_posta_nos_dois_caminhos():
     pedidos = []
 
     def resposta(pedido):
-        pedidos.append(pedido.method)
-        return httpx.Response(200, json={"estado": "conectado", "qr": None, "mensagens": []})
+        pedidos.append((pedido.method, pedido.url.path))
+        return httpx.Response(200, json={"estado": "conectado", "qr": None, "mensagens": [], "agendadas": []})
 
     cliente = cliente_com(resposta)
-    for nome in ("whatsapp_status", "whatsapp_qr", "whatsapp_listar_mensagens"):
+    for nome in ("whatsapp_status", "whatsapp_qr", "whatsapp_listar_mensagens", "whatsapp_envios"):
         chamar(cliente, nome)
-    assert set(pedidos) == {"GET"}
+    assert {metodo for metodo, _ in pedidos} == {"GET"}
     fonte = inspect.getsource(mcp_whatsapp)
-    assert ".post(" not in fonte and ".delete(" not in fonte and ".put(" not in fonte
+    assert ".delete(" not in fonte and ".put(" not in fonte
+    assert set(re.findall(r'postar\("([^"]+)"', fonte)) == {"/api/enviar", "/api/cancelar"}
+
+
+def test_destino_e_so_um_nome_nunca_um_numero():
+    [ferramenta] = [f for f in ferramentas(None) if f.name == "whatsapp_enviar"]
+    assert ferramenta.input_schema["properties"]["para"]["enum"] == ["davy", "instinct"]
+    pedidos = []
+
+    def resposta(pedido):
+        pedidos.append(pedido)
+        return httpx.Response(200, json={})
+
+    try:
+        chamar(cliente_com(resposta), "whatsapp_enviar", {"para": "5511977776666", "texto": "oi"})
+    except Exception:
+        pass  # recusar com erro também serve: o que importa é não chegar ao serviço
+    assert pedidos == []
+
+
+def test_enviar_agendado_converte_a_hora_de_brasilia():
+    corpos = []
+
+    def resposta(pedido):
+        corpos.append(json.loads(pedido.content))
+        return httpx.Response(200, json={"id": 7, "para": "instinct", "texto": "oi", "enviar_em": "2030-01-02T12:00:00+00:00", "estado": "pendente"})
+
+    saida = textos(chamar(cliente_com(resposta), "whatsapp_enviar", {"para": "instinct", "texto": "oi", "quando": "2030-01-02 09:00"}))
+    assert corpos == [{"para": "instinct", "texto": "oi", "enviar_em": 1893585600}]
+    assert "#7" in saida and "02/01/2030 09:00" in saida and "agendado" in saida
+
+
+def test_hora_no_passado_ou_mal_escrita_nao_chega_ao_servico():
+    pedidos = []
+    cliente = cliente_com(lambda pedido: pedidos.append(pedido) or httpx.Response(200, json={}))
+    assert "já passou" in textos(chamar(cliente, "whatsapp_enviar", {"para": "davy", "texto": "oi", "quando": "2001-01-01 10:00"}))
+    assert "AAAA-MM-DD" in textos(chamar(cliente, "whatsapp_enviar", {"para": "davy", "texto": "oi", "quando": "amanhã 10h"}))
+    assert pedidos == []
+
+
+def test_recusa_do_servico_e_explicada():
+    def resposta(_):
+        return httpx.Response(422, json={"title": "para precisa ser 'davy' ou 'instinct'", "status": 422})
+
+    saida = textos(chamar(cliente_com(resposta), "whatsapp_enviar", {"para": "davy", "texto": "oi"}))
+    assert "recusou o pedido" in saida and "davy" in saida
+
+
+def test_cancelar_envio():
+    def resposta(pedido):
+        return httpx.Response(200, json={"cancelada": json.loads(pedido.content)["id"] == 3})
+
+    assert "cancelado" in textos(chamar(cliente_com(resposta), "whatsapp_cancelar_envio", {"id": 3}))
+    assert "não está agendado" in textos(chamar(cliente_com(resposta), "whatsapp_cancelar_envio", {"id": 4}))
 
 
 def test_mensagem_vem_marcada_como_externa():
