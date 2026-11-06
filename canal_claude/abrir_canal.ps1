@@ -9,6 +9,15 @@
 param([string]$PastaDeTrabalho = 'D:\Projetos')
 
 $ErrorActionPreference = 'Stop'
+
+# Aberto a partir do app do Claude, o terminal herda as variáveis internas da conversa do app (login,
+# endereço da API, marcador de "sessão filha") e o Claude da janela fica sem login. Tira só as herdadas:
+# o que você mesmo configurou no Windows (usuário ou máquina) fica.
+Get-ChildItem env: | Where-Object { $_.Name -match '^(CLAUDE|ANTHROPIC)' } | ForEach-Object {
+    $doWindows = [Environment]::GetEnvironmentVariable($_.Name, 'User') -or [Environment]::GetEnvironmentVariable($_.Name, 'Machine')
+    if (-not $doWindows) { Remove-Item "env:$($_.Name)" }
+}
+
 $base = Join-Path $env:LOCALAPPDATA 'CanalWhatsapp'
 $programa = Join-Path $base 'canal_claude'
 $sessao = Join-Path $base 'sessao'
