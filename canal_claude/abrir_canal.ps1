@@ -3,8 +3,7 @@
 #
 #   powershell -ExecutionPolicy Bypass -File canal-whatsapp\canal_claude\abrir_canal.ps1
 #
-# Na primeira vez o Claude pergunta se confia na pasta, se pode usar o servidor "whatsapp" e se aceita
-# o canal em teste: responda que sim nas três.
+# Na primeira vez o Claude pergunta se confia na pasta e se aceita o canal em teste: responda que sim.
 
 param([string]$PastaDeTrabalho = 'D:\Projetos')
 
@@ -37,9 +36,13 @@ try {
     Pop-Location
 }
 
+# O servidor vai pelo --mcp-config: num .mcp.json ele dependeria de uma aprovação que nem sempre aparece,
+# e a janela abria sem o canal.
 $config = @{ mcpServers = @{ whatsapp = @{ command = 'node'; args = @((Join-Path $programa 'servidor.mjs')) } } }
 $json = $config | ConvertTo-Json -Depth 5
-[IO.File]::WriteAllText((Join-Path $sessao '.mcp.json'), $json, (New-Object Text.UTF8Encoding $false)) # sem BOM: JSON não aceita
+$arquivoConfig = Join-Path $base 'canal.mcp.json'
+[IO.File]::WriteAllText($arquivoConfig, $json, (New-Object Text.UTF8Encoding $false)) # sem BOM: JSON não aceita
+Remove-Item (Join-Path $sessao '.mcp.json') -ErrorAction SilentlyContinue # versão antiga
 
 $versao = [version](((claude --version) -split ' ')[0])
 if ($versao -lt $versaoMinima) {
@@ -49,4 +52,4 @@ if ($versao -lt $versaoMinima) {
 
 $Host.UI.RawUI.WindowTitle = 'Claude - canal do WhatsApp (deixe aberto)'
 Set-Location $sessao
-claude --dangerously-load-development-channels server:whatsapp --add-dir $PastaDeTrabalho
+claude --mcp-config $arquivoConfig --dangerously-load-development-channels server:whatsapp --add-dir $PastaDeTrabalho

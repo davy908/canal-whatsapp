@@ -24,8 +24,8 @@ poucos segundos e responde na conversa "Você". Para abrir (deixe a janela abert
 powershell -ExecutionPolicy Bypass -File canal-whatsapp\canal_claude\abrir_canal.ps1
 ```
 
-- Na primeira vez, o Claude pergunta três coisas na janela: se confia na pasta, se pode usar o servidor
-  "whatsapp" e se aceita o canal em teste. Responda que sim.
+- Na primeira vez, o Claude pergunta na janela se confia na pasta e se aceita o canal em teste.
+  Responda que sim. Se pedir login, digite `/login`.
 - Quando o Claude precisar de aprovação, ela chega no WhatsApp com um código. Responda
   `Claude sim abcde` ou `Claude não abcde`. Também dá para aprovar na própria janela.
 - Para o celular tocar quando ele terminar, o Claude manda um aviso curto ao Instinct.
