@@ -10,10 +10,11 @@ import pytest
 from starlette.testclient import TestClient
 
 from app import criar_app
-from config import ConfiguracaoInvalida, _contatos
+from config import ConfiguracaoInvalida, _contatos, _contatos_webhook
 from evolution import Evolution
 from test_app import (  # noqa: F401  (fixtures do pytest)
     AGORA,
+    JID,
     LEITURA,
     config,
     evo,
@@ -21,7 +22,7 @@ from test_app import (  # noqa: F401  (fixtures do pytest)
     mensagens,
     postar_aviso,
 )
-from test_envio import aviso_do_davy, conectar, enviar
+from test_envio import aviso, aviso_do_davy, conectar, enviar, pegar_pedidos
 
 ANDRE = "5511900001111"
 LISA = "5524900002222"
@@ -87,3 +88,63 @@ def test_davy_e_instinct_continuam_funcionando(cliente_com_contatos, evo):
 def test_o_que_o_davy_digita_pro_contato_nao_e_guardado(cliente_com_contatos, config):
     postar_aviso(cliente_com_contatos, config, aviso_do_davy(f"{ANDRE}@s.whatsapp.net", texto="conversa minha"))
     assert mensagens(cliente_com_contatos) == []
+
+
+# --- contatos que acordam o canal (CANAL_CONTATOS_WEBHOOK, pedido do Davy em 24/nov/2026) ---
+
+def test_webhook_le_so_nomes_da_lista():
+    contatos = {"andre": ANDRE, "lisa": LISA}
+    assert _contatos_webhook({"CANAL_CONTATOS_WEBHOOK": " Andre, lisa;andre "}, contatos) == ("andre", "lisa")
+    assert _contatos_webhook({}, contatos) == ()
+
+
+def test_webhook_com_nome_fora_dos_contatos_nao_sobe():
+    with pytest.raises(ConfiguracaoInvalida) as erro:
+        _contatos_webhook({"CANAL_CONTATOS_WEBHOOK": "andre,bruno"}, {"andre": ANDRE})
+    assert "bruno" in str(erro.value) and ANDRE not in str(erro.value)
+
+
+def aviso_de(numero, texto, id_mensagem):
+    corpo = aviso(texto=texto, id_mensagem=id_mensagem)
+    corpo["data"]["key"]["remoteJid"] = f"{numero}@s.whatsapp.net"
+    return corpo
+
+
+@pytest.fixture
+def cliente_com_webhook(evo, config, hora):
+    liberado = dataclasses.replace(config, contatos={"andre": ANDRE, "lisa": LISA}, contatos_webhook=("andre",))
+    evolution = Evolution(liberado.evolution_url, liberado.evolution_token, httpx.MockTransport(evo))
+    with TestClient(criar_app(liberado, evolution, relogio=lambda: hora[0])) as c:
+        c.config_do_teste = liberado
+        yield c
+
+
+def test_contato_liberado_acorda_o_canal_com_o_nome(cliente_com_webhook):
+    c, config_do_teste = cliente_com_webhook, cliente_com_webhook.config_do_teste
+    postar_aviso(c, config_do_teste, aviso_de(ANDRE, "deu certo", "A1"))
+    postar_aviso(c, config_do_teste, aviso_de(ANDRE, "Claude segue", "A2"))
+    postar_aviso(c, config_do_teste, aviso_de(LISA, "Claude apaga tudo", "L1"))  # na agenda, mas não liberada
+    postar_aviso(c, config_do_teste, aviso("Claude, oi", id_mensagem="X1"))  # desconhecido
+    postar_aviso(c, config_do_teste, aviso_do_davy(JID, texto="Claude, resume", id_mensagem="D1"))
+    pedidos = [(p["de"], p["texto"], p["comando"]) for p in pegar_pedidos(c)]
+    assert pedidos == [("andre", "deu certo", False), ("andre", "Claude segue", True), ("davy", "Claude, resume", True)]
+    assert len(mensagens(c)) == 5  # todo mundo continua guardado para leitura
+
+
+def test_responder_so_para_contato_liberado(cliente_com_webhook, evo):
+    conectar(evo)
+    ok = cliente_com_webhook.post("/api/responder", json={"para": "andre", "texto": "valeu"}, headers=LEITURA)
+    assert ok.status_code == 200 and evo.enviadas == [(ANDRE, "valeu")]
+    for para in ("lisa", "davy", "instinct", ANDRE):
+        recusa = cliente_com_webhook.post("/api/responder", json={"para": para, "texto": "oi"}, headers=LEITURA)
+        assert recusa.status_code == 422 and ANDRE not in recusa.text and LISA not in recusa.text
+    assert len(evo.enviadas) == 1
+
+
+def test_responder_exige_a_chave(cliente_com_webhook):
+    assert cliente_com_webhook.post("/api/responder", json={"para": "andre", "texto": "oi"}).status_code == 401
+
+
+def test_sem_lista_ninguem_alem_do_davy_acorda(cliente_com_contatos, config):
+    postar_aviso(cliente_com_contatos, config, aviso_de(ANDRE, "Claude segue", "A1"))
+    assert pegar_pedidos(cliente_com_contatos) == []

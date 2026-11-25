@@ -21,11 +21,15 @@ Quem atende é o **canal**: uma conversa do Claude aberta numa janela de termina
 poucos segundos e responde na conversa "Você". Para abrir (deixe a janela aberta, pode minimizar):
 
 ```bash
-powershell -ExecutionPolicy Bypass -File canal-whatsapp\canal_claude\abrir_canal.ps1
+powershell -ExecutionPolicy Bypass -File canal_claude\abrir_canal.ps1
 ```
 
-- Na primeira vez, o Claude pergunta na janela se confia na pasta e se aceita o canal em teste.
-  Responda que sim. Se pedir login, digite `/login`.
+- Na primeira vez, o Claude pergunta na janela se confia na pasta, se aceita o canal em teste e se liga o
+  Remote Control. Responda que sim. Se pedir login, digite `/login`.
+- Com o Remote Control, a conversa aparece como **"Canal WhatsApp"** na barra lateral do app do Claude e no
+  celular: dá para acompanhar e responder por lá com a janela minimizada. Outro nome: `-NomeNoApp "Debug X"`.
+- O programa e a sessão ficam em `D:\Projetos\CanalWhatsapp` (fora do AppData: o que o app do Claude grava em
+  `AppData\Local` vai para uma pasta privada dele, que a janela do terminal não enxerga).
 - Quando o Claude precisar de aprovação, ela chega no WhatsApp com um código. Responda
   `Claude sim abcde` ou `Claude não abcde`. Também dá para aprovar na própria janela.
 - Para o celular tocar quando ele terminar, o Claude manda um aviso curto ao Instinct.
@@ -33,8 +37,23 @@ powershell -ExecutionPolicy Bypass -File canal-whatsapp\canal_claude\abrir_canal
 - O canal é um recurso em teste do Claude Code e pode mudar. Precisa do Claude Code 2.1.234 ou mais novo
   para as aprovações irem ao WhatsApp (`claude update`).
 
-O resto da conversa "Você" continua sendo anotação sua, e mensagem de outra pessoa ou do Instinct nunca
-vira pedido. Quem estiver com o seu celular desbloqueado consegue pedir e aprovar: cuide dele.
+O resto da conversa "Você" continua sendo anotação sua. Quem estiver com o seu celular desbloqueado
+consegue pedir e aprovar: cuide dele.
+
+### Contatos que acordam o canal
+
+Por padrão, mensagem de outra pessoa ou do Instinct só fica guardada para leitura: nunca acorda o canal.
+Para liberar alguém (por exemplo, para o Claude esperar o resultado de um teste do André e agir), ponha o
+nome em `CANAL_CONTATOS_WEBHOOK`, no Ambiente do serviço. O nome precisa existir em `CANAL_CONTATOS`.
+
+- **Toda** mensagem desse contato chega ao canal, marcada com o nome dele.
+- Começando com **Claude** ("Claude segue"), chega como **pedido**: o Claude trata como pedido dessa pessoa,
+  com a confiança que você deu, dentro do plano que você deixou na conversa.
+- Sem "Claude" ("deu certo", "deu erro tal"), chega como **mensagem**: informação para o Claude seguir o plano.
+- O Claude responde a esse contato sozinho, com a ferramenta `responder_contato`. A VPS recusa qualquer
+  nome fora de `CANAL_CONTATOS_WEBHOOK`.
+- **Aprovação continua só sua.** "Claude sim abcde" vindo do contato vira só mensagem.
+- Libere só quem você confia: o que essa pessoa pede, o Claude faz. Para tirar, apague o nome e reimplante.
 
 ## O que acontece quando chega uma mensagem
 
@@ -44,6 +63,9 @@ vira pedido. Quem estiver com o seu celular desbloqueado consegue pedir e aprova
    Instinct), `davy` (digitada no seu celular) ou `claude` (enviada pelo Claude).
 
 ## Envios
+
+O Claude envia por nome, nunca por número: `davy`, `instinct` e os contatos de `CANAL_CONTATOS`
+(`andre:5511999990000;lisa:5524999990000`, no Ambiente). Para os contatos, só quando você pede.
 
 O Claude envia na hora ou agenda para um horário (horário de Brasília). Quem envia é a VPS, então
 funciona com o computador desligado. No painel aparecem os envios, com um botão para cancelar os

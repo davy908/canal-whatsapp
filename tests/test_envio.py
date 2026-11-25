@@ -120,7 +120,7 @@ def test_nota_antiga_nao_vira_pedido_depois_de_atualizar(tmp_path):
     antiga.guardar(MensagemRecebida("A", AGORA, "+55", "Davy", "texto", "Claude, velho", "davy", "+" + NUMERO))
     with antiga._conexao() as banco:
         banco.execute("DELETE FROM ajustes WHERE nome = 'cursor_pedidos'")  # como o banco da versão anterior
-    assert Loja(caminho, 7).pegar_do_davy_depois_do_cursor() == []
+    assert Loja(caminho, 7).pegar_depois_do_cursor() == []
 
 
 # --- envio ---

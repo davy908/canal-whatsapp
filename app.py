@@ -33,6 +33,7 @@ from loja import ENVIADA, FALHOU, Loja
 from mensagem import (
     INSTANCIA,
     ORIGEM_CLAUDE,
+    ORIGEM_DAVY,
     TAMANHO_MAXIMO_TEXTO,
     MensagemRecebida,
     _so_digitos,
@@ -204,20 +205,44 @@ class Canal:
     # --- pedidos ---
 
     def pegar_pedidos(self) -> dict:
-        """Pedidos novos do Davy: só na conversa dele com ele mesmo e começando com "Claude"."""
-        pedidos = [
-            {
-                "id": linha["seq"],
-                "recebida_em": datetime.fromtimestamp(linha["recebida_em"], timezone.utc).isoformat(),
-                "tipo": linha["tipo"],
-                "texto": linha["texto"],
-            }
-            for linha in self._loja.pegar_do_davy_depois_do_cursor()
-            if numeros_iguais(linha["conversa"], self._config.numero_esperado) and _PEDIDO.match(linha["texto"])
-        ]
+        """O que acorda o canal. Do Davy: só na conversa dele com ele mesmo e começando com "Claude".
+        Dos contatos de CANAL_CONTATOS_WEBHOOK: toda mensagem, com `de` = nome e `comando` = começa com
+        "Claude". Qualquer outra pessoa só fica guardada para leitura."""
+        pedidos = []
+        for linha in self._loja.pegar_depois_do_cursor():
+            de = self._quem_acorda_o_canal(linha)
+            if de is None:
+                continue
+            pedidos.append(
+                {
+                    "id": linha["seq"],
+                    "recebida_em": datetime.fromtimestamp(linha["recebida_em"], timezone.utc).isoformat(),
+                    "tipo": linha["tipo"],
+                    "texto": linha["texto"],
+                    "de": de,
+                    "comando": bool(_PEDIDO.match(linha["texto"])),
+                }
+            )
         if pedidos:
             log.info("pedidos_entregues quantidade=%s", len(pedidos))
         return {"pedidos": pedidos}
+
+    def _quem_acorda_o_canal(self, linha: dict) -> str | None:
+        if linha["origem"] == ORIGEM_DAVY:
+            conversa_voce = numeros_iguais(linha["conversa"], self._config.numero_esperado)
+            return "davy" if conversa_voce and _PEDIDO.match(linha["texto"]) else None
+        for nome, numero in self._config.numeros_webhook().items():
+            if numeros_iguais(linha["conversa"], numero):
+                return nome
+        return None
+
+    def responder_contato(self, para: object, texto: object) -> dict:
+        """Envio que o canal faz sozinho: só para os nomes de CANAL_CONTATOS_WEBHOOK, nunca para o resto
+        da lista de contatos (esses continuam só por pedido do Davy, em /api/enviar)."""
+        liberados = self._config.contatos_webhook
+        if not isinstance(para, str) or para not in liberados:
+            raise PedidoInvalido("para precisa ser um destes: " + (", ".join(liberados) or "nenhum (CANAL_CONTATOS_WEBHOOK vazio)"))
+        return self.enviar(para, texto, None)
 
     # --- envio ---
 
@@ -420,6 +445,9 @@ def criar_app(config: Config, evolution: Evolution, relogio=time.time) -> Starle
     def cancelar(dados: dict) -> dict:
         return canal.cancelar(dados.get("id"))
 
+    def responder(dados: dict) -> dict:
+        return canal.responder_contato(dados.get("para"), dados.get("texto"))
+
     def agendadas(_: Request) -> Response:
         return JSONResponse(canal.agendadas())
 
@@ -491,6 +519,7 @@ def criar_app(config: Config, evolution: Evolution, relogio=time.time) -> Starle
             Route("/api/pedidos/pegar", _so_leitura(pegar_pedidos), methods=["POST"]),
             Route("/api/enviar", _do_claude(enviar), methods=["POST"]),
             Route("/api/cancelar", _do_claude(cancelar), methods=["POST"]),
+            Route("/api/responder", _do_claude(responder), methods=["POST"]),
             Route("/painel", _so_davy(painel)),
             Route("/painel/situacao", _so_davy(painel_situacao)),
             Route("/painel/qr", _so_davy(painel_qr)),

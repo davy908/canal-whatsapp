@@ -66,6 +66,18 @@ def test_pedidos_novos():
     assert vazio == "Nenhum pedido novo."
 
 
+def test_pedidos_de_contato_liberado_vem_com_o_nome():
+    def resposta(_):
+        return httpx.Response(200, json={"pedidos": [
+            {"id": 3, "recebida_em": "2030-01-02T12:00:00+00:00", "tipo": "texto", "texto": "deu certo", "de": "andre", "comando": False},
+            {"id": 4, "recebida_em": "2030-01-02T12:01:00+00:00", "tipo": "texto", "texto": "Claude segue", "de": "andre", "comando": True},
+        ]})
+
+    saida = textos(chamar(cliente_com(resposta), "whatsapp_pedidos_novos"))
+    assert 'de andre (mensagem): "deu certo"' in saida
+    assert 'de andre (pedido): "Claude segue"' in saida
+
+
 def test_destino_e_so_um_nome_nunca_um_numero():
     [ferramenta] = [f for f in ferramentas(None) if f.name == "whatsapp_enviar"]
     assert ferramenta.input_schema["properties"]["para"]["pattern"] == r"^[a-z][a-z0-9_-]{0,29}$"

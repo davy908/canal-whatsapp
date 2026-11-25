@@ -3,13 +3,14 @@
 #   Instalar:  powershell -ExecutionPolicy Bypass -File canal-whatsapp\instalar_mcp.ps1
 #   Tirar:     powershell -ExecutionPolicy Bypass -File canal-whatsapp\instalar_mcp.ps1 -Remover
 #
-# Copia o programa para %LOCALAPPDATA%\CanalWhatsapp. Vale para conversas abertas depois.
+# Copia o programa para D:\Projetos\CanalWhatsapp (fora do AppData: o app do Claude não enxerga igual ao
+# terminal o que grava lá). Vale para conversas abertas depois.
 
 param([switch]$Remover)
 
 $ErrorActionPreference = 'Stop'
 $nome = 'canal-whatsapp'
-$destino = Join-Path $env:LOCALAPPDATA 'CanalWhatsapp'
+$destino = 'D:\Projetos\CanalWhatsapp'
 $programa = Join-Path $destino 'mcp_whatsapp.py'
 
 cmd /c "claude mcp remove -s user $nome >nul 2>nul"

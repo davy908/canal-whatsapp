@@ -29,6 +29,12 @@ class Config:
     dias_guarda: int
     numero_instinct: str = ""
     contatos: dict[str, str] = field(default_factory=dict)
+    contatos_webhook: tuple[str, ...] = ()
+
+    def numeros_webhook(self) -> dict[str, str]:
+        """Contatos de CANAL_CONTATOS_WEBHOOK: as mensagens deles acordam o canal como se fossem do Davy,
+        e o Claude pode responder a eles sozinho (pedido do Davy, 24/nov/2026). O resto só fica guardado."""
+        return {nome: self.contatos[nome] for nome in self.contatos_webhook}
 
     def destinos(self) -> dict[str, str]:
         """O Davy e o Instinct: as conversas DELE que o canal guarda (inclusive o que ele mesmo digita)."""
@@ -78,6 +84,20 @@ def _contatos(ambiente: dict) -> dict[str, str]:
     return contatos
 
 
+def _contatos_webhook(ambiente: dict, contatos: dict[str, str]) -> tuple[str, ...]:
+    """CANAL_CONTATOS_WEBHOOK=andre,lisa: só nomes, que precisam estar em CANAL_CONTATOS. Vazio: ninguém."""
+    nomes: list[str] = []
+    for item in re.split(r"[,;]", ambiente.get("CANAL_CONTATOS_WEBHOOK", "")):
+        nome = item.strip().lower()
+        if not nome:
+            continue
+        if nome not in contatos:
+            raise ConfiguracaoInvalida(f"CANAL_CONTATOS_WEBHOOK: '{nome}' não está em CANAL_CONTATOS")
+        if nome not in nomes:
+            nomes.append(nome)
+    return tuple(nomes)
+
+
 def _dias_guarda(ambiente: dict) -> int:
     try:
         dias = int(ambiente.get("CANAL_DIAS_GUARDA", "7"))
@@ -90,6 +110,7 @@ def _dias_guarda(ambiente: dict) -> int:
 
 def carregar(ambiente: dict | None = None) -> Config:
     ambiente = os.environ if ambiente is None else ambiente
+    contatos = _contatos(ambiente)
     return Config(
         # Endereços internos da rede do EasyPanel: nem o Evolution nem o webhook passam pela internet.
         evolution_url=ambiente.get("EVOLUTION_URL", "http://acelera_so_evolution-api:8080").rstrip("/"),
@@ -101,7 +122,8 @@ def carregar(ambiente: dict | None = None) -> Config:
         caminho_banco=ambiente.get("CANAL_BANCO", "/data/canal.db"),
         dias_guarda=_dias_guarda(ambiente),
         numero_instinct=_numero(ambiente, "CANAL_NUMERO_INSTINCT", NUMERO_INSTINCT_PADRAO),
-        contatos=_contatos(ambiente),
+        contatos=contatos,
+        contatos_webhook=_contatos_webhook(ambiente, contatos),
     )
 
 

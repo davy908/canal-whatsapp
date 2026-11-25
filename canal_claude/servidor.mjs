@@ -57,6 +57,9 @@ function criarServico() {
     async enviar(para, texto) {
       return postar("/api/enviar", { para, texto });
     },
+    async responderContato(para, texto) {
+      return postar("/api/responder", { para, texto }); // a VPS só aceita os nomes de CANAL_CONTATOS_WEBHOOK
+    },
   };
 }
 
@@ -88,6 +91,19 @@ const FERRAMENTAS = [
     },
   },
   {
+    name: "responder_contato",
+    description:
+      "Responde no WhatsApp a um contato que o Davy liberou (CANAL_CONTATOS_WEBHOOK), pelo nome. Outros nomes são recusados.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        para: { type: "string", pattern: "^[a-z][a-z0-9_-]{0,29}$" },
+        texto: { type: "string", minLength: 1, maxLength: 4000 },
+      },
+      required: ["para", "texto"],
+    },
+  },
+  {
     name: "avisar_instinct",
     description: "Manda ao Instinct um aviso curto para o celular do Davy tocar. Sem dados privados.",
     inputSchema: {
@@ -101,13 +117,15 @@ const DESTINO = { responder: "davy", avisar_instinct: "instinct" };
 
 mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: FERRAMENTAS }));
 mcp.setRequestHandler(CallToolRequestSchema, async (pedido) => {
-  const para = DESTINO[pedido.params.name];
+  const nome = pedido.params.name;
+  const contato = nome === "responder_contato";
+  const para = contato ? String(pedido.params.arguments?.para ?? "").trim() : DESTINO[nome];
   const texto = String(pedido.params.arguments?.texto ?? "").trim();
   if (!para || !texto) {
     return { content: [{ type: "text", text: "Ferramenta ou texto inválido." }], isError: true };
   }
   try {
-    const envio = await servico.enviar(para, texto);
+    const envio = contato ? await servico.responderContato(para, texto) : await servico.enviar(para, texto);
     return { content: [{ type: "text", text: `Enviado (${envio.estado}).` }] };
   } catch (erro) {
     return { content: [{ type: "text", text: `Não consegui enviar: ${erro.message}` }], isError: true };

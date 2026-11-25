@@ -1,12 +1,12 @@
 // O vaivém do canal: busca pedidos no serviço da VPS, entrega ao Claude e leva as aprovações ao WhatsApp.
 // Recebe a rede e o MCP por fora (servico, notificar) para os testes rodarem sem nenhum dos dois.
-import { entender, mensagemDeAprovacao } from "./logica.mjs";
+import { entender, entenderContato, mensagemDeAprovacao } from "./logica.mjs";
 
 const VALIDADE_APROVACAO_MS = 30 * 60 * 1000; // aprovação velha não vale: o Claude já seguiu ou desistiu
 
 export class Canal {
   constructor({ servico, notificar, relogio = () => Date.now(), registrar = () => {} }) {
-    this.servico = servico; // { pegarPedidos(), enviar(para, texto) }
+    this.servico = servico; // { pegarPedidos(), enviar(para, texto), responderContato(para, texto) }
     this.notificar = notificar; // (method, params) => Promise
     this.relogio = relogio;
     this.registrar = registrar;
@@ -22,15 +22,25 @@ export class Canal {
   }
 
   async #tratar(pedido) {
+    const de = pedido.de ?? "davy"; // serviço antigo não manda `de`: tudo era do Davy
+    const meta = { pedido_id: String(pedido.id), hora: String(pedido.recebida_em ?? ""), de };
+    if (de !== "davy") {
+      // Contato liberado: entrega tudo, marcando o que é pedido. Aprovação nunca vem de contato.
+      const { tipo, texto } = entenderContato(pedido.texto);
+      const formato = String(pedido.tipo ?? "texto");
+      this.registrar(`mensagem ${pedido.id} de contato entregue`);
+      await this.notificar("notifications/claude/channel", {
+        content: texto || `[${formato} sem texto]`,
+        meta: { ...meta, tipo, formato },
+      });
+      return;
+    }
     const entendido = entender(pedido.texto);
     if (entendido.tipo === "aprovacao") {
       await this.#responderAprovacao(entendido);
     } else if (entendido.tipo === "pedido") {
       this.registrar(`pedido ${pedido.id} entregue`);
-      await this.notificar("notifications/claude/channel", {
-        content: entendido.texto,
-        meta: { pedido_id: String(pedido.id), hora: String(pedido.recebida_em ?? "") },
-      });
+      await this.notificar("notifications/claude/channel", { content: entendido.texto, meta: { ...meta, tipo: "pedido" } });
     }
   }
 

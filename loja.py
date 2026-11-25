@@ -104,8 +104,9 @@ class Loja:
             )
             return banco.execute("DELETE FROM mensagens WHERE recebida_em < ?", (corte,)).rowcount
 
-    def pegar_do_davy_depois_do_cursor(self) -> list[dict]:
-        """Mensagens digitadas pelo Davy desde a última vez, e avança o cursor: cada uma sai uma vez só.
+    def pegar_depois_do_cursor(self) -> list[dict]:
+        """Mensagens do Davy e recebidas desde a última vez, e avança o cursor: cada uma sai uma vez só.
+        Quem vira pedido o serviço decide depois (o Davy com "Claude", os contatos de CANAL_CONTATOS_WEBHOOK).
 
         Avança antes de alguém agir: se a tarefa cair no meio, o pedido se perde em vez de rodar duas vezes.
         """
@@ -113,7 +114,8 @@ class Loja:
             banco.execute("BEGIN IMMEDIATE")  # duas tarefas ao mesmo tempo não pegam o mesmo pedido
             cursor = int(banco.execute("SELECT valor FROM ajustes WHERE nome = 'cursor_pedidos'").fetchone()["valor"])
             linhas = banco.execute(
-                "SELECT seq, recebida_em, tipo, texto, conversa FROM mensagens WHERE origem = 'davy' AND seq > ? ORDER BY seq",
+                "SELECT seq, recebida_em, tipo, texto, conversa, origem FROM mensagens"
+                " WHERE origem IN ('davy', 'externo') AND seq > ? ORDER BY seq",
                 (cursor,),
             ).fetchall()
             ultimo = banco.execute("SELECT COALESCE(MAX(seq), 0) AS ultimo FROM mensagens").fetchone()["ultimo"]
