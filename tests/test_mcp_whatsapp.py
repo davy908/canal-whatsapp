@@ -68,7 +68,7 @@ def test_pedidos_novos():
 
 def test_destino_e_so_um_nome_nunca_um_numero():
     [ferramenta] = [f for f in ferramentas(None) if f.name == "whatsapp_enviar"]
-    assert ferramenta.input_schema["properties"]["para"]["enum"] == ["davy", "instinct"]
+    assert ferramenta.input_schema["properties"]["para"]["pattern"] == r"^[a-z][a-z0-9_-]{0,29}$"
     pedidos = []
 
     def resposta(pedido):

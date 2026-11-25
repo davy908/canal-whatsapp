@@ -1,8 +1,8 @@
-"""Serviço da VPS: recebe o aviso do Evolution, guarda o mínimo, e envia só para o Davy e o Instinct.
+"""Serviço da VPS: recebe o aviso do Evolution, guarda o mínimo, e envia só para o Davy, o Instinct e a lista fechada de contatos.
 
 Três credenciais, três portas: o Evolution só escreve em /webhook, o Claude lê e pede envios em
-/api, e só o Davy desconecta ou apaga, em /painel. O Claude escolhe o destino pelo nome ("davy" ou
-"instinct"); o número vem da configuração, então nenhum texto consegue mandar mensagem para outra
+/api, e só o Davy desconecta ou apaga, em /painel. O Claude escolhe o destino pelo nome ("davy",
+"instinct" ou um nome de CANAL_CONTATOS); o número vem da configuração, então nenhum texto consegue mandar mensagem para outra
 pessoa. Conteúdo de mensagem recebida nunca decide nada aqui e nunca aparece em log. Sem limite de
 tentativas de senha porque as chaves têm 32+ caracteres aleatórios: adivinhar não é viável.
 """
@@ -223,9 +223,9 @@ class Canal:
 
     def enviar(self, para: object, texto: object, enviar_em: object) -> dict:
         """Agenda o envio; sem hora (ou hora já passada), envia agora e devolve o resultado."""
-        destinos = self._config.destinos()
+        destinos = self._config.destinos_de_envio()
         if not isinstance(para, str) or not destinos.get(para):
-            raise PedidoInvalido("para precisa ser 'davy' ou 'instinct'")
+            raise PedidoInvalido("para precisa ser um destes: " + ", ".join(sorted(destinos)))
         limpo = limpar_texto(texto, TAMANHO_MAXIMO_TEXTO)
         if not limpo or not isinstance(texto, str) or len(texto.strip()) > TAMANHO_MAXIMO_TEXTO:
             raise PedidoInvalido(f"texto vazio ou com mais de {TAMANHO_MAXIMO_TEXTO} caracteres")
@@ -255,7 +255,7 @@ class Canal:
                 if self._loja.desistir_das_atrasadas(agora - ATRASO_MAXIMO_SEGUNDOS, agora):
                     log.warning("envios_atrasados_desistidos")
                 return
-            destinos = self._config.destinos()
+            destinos = self._config.destinos_de_envio()
             for item in self._loja.pegar_para_enviar(agora):
                 numero = destinos.get(item["para"])
                 try:

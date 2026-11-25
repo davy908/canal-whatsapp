@@ -4,10 +4,13 @@ O código só conhece o NOME das variáveis. Sem segredo forte o serviço não s
 aberto por esquecimento.
 """
 import os
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 
 TAMANHO_MINIMO_SEGREDO = 32
 NUMERO_INSTINCT_PADRAO = "16508702892"  # o assistente que avisa o Davy; troca por CANAL_NUMERO_INSTINCT
+RESERVADOS = ("davy", "instinct")
+NOME_DE_CONTATO = re.compile(r"[a-z][a-z0-9_-]{0,29}")  # começa com letra: nunca parece um número
 
 
 class ConfiguracaoInvalida(Exception):
@@ -25,10 +28,17 @@ class Config:
     caminho_banco: str
     dias_guarda: int
     numero_instinct: str = ""
+    contatos: dict[str, str] = field(default_factory=dict)
 
     def destinos(self) -> dict[str, str]:
-        """Os únicos números para onde este serviço envia. O Claude escolhe pelo nome, nunca pelo número."""
+        """O Davy e o Instinct: as conversas DELE que o canal guarda (inclusive o que ele mesmo digita)."""
         return {"davy": self.numero_esperado, "instinct": self.numero_instinct}
+
+    def destinos_de_envio(self) -> dict[str, str]:
+        """Os únicos números para onde este serviço envia: o Davy, o Instinct e a lista fechada de
+        CANAL_CONTATOS (pedido do Davy, 24/nov/2026). O Claude escolhe pelo nome, nunca pelo número.
+        O que o Davy digita para um contato continua fora do canal: só `destinos()` decide isso."""
+        return {**self.contatos, **self.destinos()}
 
 
 def _segredo(ambiente: dict, nome: str) -> str:
@@ -47,6 +57,25 @@ def _numero(ambiente: dict, nome: str, padrao: str = "") -> str:
 
 def _numero_esperado(ambiente: dict) -> str:
     return _numero(ambiente, "CANAL_NUMERO_ESPERADO")
+
+
+def _contatos(ambiente: dict) -> dict[str, str]:
+    """CANAL_CONTATOS=andre:5511999990000;lisa:5524999990000. O erro cita o nome, nunca o número."""
+    contatos: dict[str, str] = {}
+    for item in ambiente.get("CANAL_CONTATOS", "").split(";"):
+        if not item.strip():
+            continue
+        nome, separador, numero = item.partition(":")
+        nome = nome.strip().lower()
+        if not separador or not NOME_DE_CONTATO.fullmatch(nome):
+            raise ConfiguracaoInvalida("CANAL_CONTATOS: use nome:numero separados por ponto e vírgula (nome começa com letra; só letras sem acento, números, - e _)")
+        if nome in RESERVADOS or nome in contatos:
+            raise ConfiguracaoInvalida(f"CANAL_CONTATOS: o nome '{nome}' está repetido ou é reservado")
+        digitos = "".join(c for c in numero if c.isdigit())
+        if len(digitos) < 10:
+            raise ConfiguracaoInvalida(f"CANAL_CONTATOS: o número de '{nome}' precisa de DDI + DDD + número")
+        contatos[nome] = digitos
+    return contatos
 
 
 def _dias_guarda(ambiente: dict) -> int:
@@ -72,6 +101,7 @@ def carregar(ambiente: dict | None = None) -> Config:
         caminho_banco=ambiente.get("CANAL_BANCO", "/data/canal.db"),
         dias_guarda=_dias_guarda(ambiente),
         numero_instinct=_numero(ambiente, "CANAL_NUMERO_INSTINCT", NUMERO_INSTINCT_PADRAO),
+        contatos=_contatos(ambiente),
     )
 
 
