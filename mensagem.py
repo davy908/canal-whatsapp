@@ -31,7 +31,7 @@ _JUNTA_EMOJI = {"‌", "‍"}  # sem eles, emoji composto quebra; são os único
 
 
 ORIGEM_EXTERNA = "externo"  # qualquer outra pessoa ou robô, inclusive o Instinct
-ORIGEM_DAVY = "davy"  # digitado no celular do Davy
+ORIGEM_DAVY = "davy"  # digitado no celular do dono do canal (no banco é sempre "davy"; na API sai o nome do dono)
 ORIGEM_CLAUDE = "claude"  # enviado por este serviço, a pedido do Claude
 
 
@@ -120,6 +120,8 @@ def extrair_recebida(
     agora: int | None = None,
     numero_do_davy: str = "",
     conversas_do_davy: tuple[str, ...] = (),
+    instancia: str = INSTANCIA,
+    nome_do_dono: str = "Davy",
 ) -> MensagemRecebida | None:
     """Devolve a mensagem que merece ser guardada, ou None para o resto (grupos, status, outras conversas).
 
@@ -127,7 +129,7 @@ def extrair_recebida(
     `conversas_do_davy` (ele mesmo e o Instinct).
     """
     agora = int(datetime.now(timezone.utc).timestamp()) if agora is None else agora
-    if aviso.get("event") != "messages.upsert" or aviso.get("instance") != INSTANCIA:
+    if aviso.get("event") != "messages.upsert" or aviso.get("instance") != instancia:
         return None
     dados = aviso.get("data")
     if not isinstance(dados, dict):
@@ -146,7 +148,7 @@ def extrair_recebida(
             # Sem conteúdo no registro: só o tipo de endereço, para entender um @lid que não casou.
             log.info("saida_ignorada endereco=%s", conversa.rpartition("@")[2])
             return None
-        origem, remetente, nome = ORIGEM_DAVY, "+" + _so_digitos(numero_do_davy), "Davy"
+        origem, remetente, nome = ORIGEM_DAVY, "+" + _so_digitos(numero_do_davy), nome_do_dono
     else:
         origem, remetente = ORIGEM_EXTERNA, com_quem
         nome = limpar_texto(dados.get("pushName"), TAMANHO_MAXIMO_NOME)

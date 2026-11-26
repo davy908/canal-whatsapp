@@ -34,7 +34,7 @@ PAGINA_PAINEL = """<!doctype html>
 <body>
 <main>
   <h1>Canal WhatsApp</h1>
-  <p class="suave">Lê as mensagens e envia só para você e para o Instinct.</p>
+  <p class="suave">Lê as mensagens deste número e envia só para você, o Instinct e os contatos combinados.</p>
   <p id="estado">Conferindo...</p>
   <p id="numero" class="suave"></p>
   <button id="mostrar" type="button" hidden>Mostrar QR para conectar</button>
@@ -55,9 +55,9 @@ PAGINA_PAINEL = """<!doctype html>
     aguardando_qr: ["Esperando o QR ser escaneado", ""],
     desconectado: ["Desconectado", ""],
     conferindo_numero: ["Conectando, conferindo o número...", ""],
-    instancia_nao_criada: ["A instância canal-ia ainda não existe no Evolution", "ruim"],
+    instancia_nao_criada: ["A instância deste canal ainda não existe no Evolution", "ruim"],
     numero_errado_desconectado: ["Número diferente do combinado: desconectei e nada foi guardado", "ruim"],
-    chave_geral_recusada: ["A chave colocada é a geral do Evolution. Troque pela chave da instância canal-ia", "ruim"],
+    chave_geral_recusada: ["A chave colocada é a geral do Evolution. Troque pela chave da instância deste canal", "ruim"],
     evolution_indisponivel_ou_chave_errada: ["O Evolution não respondeu, ou a chave está errada", "ruim"],
   };
   const el = (id) => document.getElementById(id);
@@ -92,10 +92,15 @@ PAGINA_PAINEL = """<!doctype html>
       el("qr").style.display = "block";
       el("dica").hidden = false;
     }
+    conhecerDono(dados);
     mostrarEstado(dados);
   }
 
   const DESTINOS = { davy: "Para você", instinct: "Para o Instinct" };
+  function conhecerDono(dados) {
+    if (dados.pessoa && !DESTINOS[dados.pessoa]) DESTINOS[dados.pessoa] = "Para você";
+    if (dados.instancia) el("estado").title = "Instância " + dados.instancia;
+  }
   const ESTADOS = { pendente: "Agendado", enviando: "Enviando", enviada: "Enviado", falhou: "Não foi enviado", cancelada: "Cancelado" };
   const HORA = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
 

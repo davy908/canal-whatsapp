@@ -1,6 +1,6 @@
-"""Conversa com o Evolution 2.3.7, sempre e só sobre a instância `canal-ia`.
+"""Conversa com o Evolution 2.3.7, sempre e só sobre UMA instância (a da pessoa dona deste canal).
 
-O nome da instância é fixo no código para este serviço nunca alcançar a instância de outro uso. A
+O nome da instância vem da configuração e nunca de um pedido, para o canal nunca alcançar a instância de outro uso. A
 chave é a da própria instância: mesmo vazando, ela não abre as outras. O único envio é texto, e
 quem decide o número é o serviço (só o Davy e o Instinct): um teste confere a lista de caminhos.
 """
@@ -30,7 +30,8 @@ class ChaveGeralRecusada(Exception):
 
 
 class Evolution:
-    def __init__(self, url: str, token: str, transporte: httpx.BaseTransport | None = None):
+    def __init__(self, url: str, token: str, transporte: httpx.BaseTransport | None = None, instancia: str = INSTANCIA):
+        self.instancia = instancia
         self._http = httpx.Client(
             base_url=url,
             headers={"apikey": token},
@@ -50,7 +51,7 @@ class Evolution:
 
     def estado(self) -> str | None:
         """'open', 'connecting' ou 'close'. None se a instância ainda não foi criada no Evolution."""
-        resposta = self._pedir("GET", f"/instance/connectionState/{INSTANCIA}")
+        resposta = self._pedir("GET", f"/instance/connectionState/{self.instancia}")
         if resposta.status_code == 404:
             return None
         if not resposta.is_success:
@@ -67,10 +68,10 @@ class Evolution:
         instancias = _json(resposta)
         if not isinstance(instancias, list):
             raise EvolutionFora("resposta inesperada")
-        if any(isinstance(i, dict) and i.get("name") != INSTANCIA for i in instancias):
+        if any(isinstance(i, dict) and i.get("name") != self.instancia for i in instancias):
             raise ChaveGeralRecusada()
         for instancia in instancias:
-            if isinstance(instancia, dict) and instancia.get("name") == INSTANCIA:
+            if isinstance(instancia, dict) and instancia.get("name") == self.instancia:
                 dono = instancia.get("ownerJid")
                 return dono if isinstance(dono, str) and dono else None
         return None
@@ -79,7 +80,7 @@ class Evolution:
         """Aponta o aviso para este serviço e aplica os ajustes. Pode repetir à vontade."""
         self.numero_conectado()  # antes de gravar qualquer coisa: barra a chave geral
         self._gravar(
-            f"/webhook/set/{INSTANCIA}",
+            f"/webhook/set/{self.instancia}",
             {
                 "webhook": {
                     "enabled": True,
@@ -91,7 +92,7 @@ class Evolution:
                 }
             },
         )
-        self._gravar(f"/settings/set/{INSTANCIA}", AJUSTES_DA_INSTANCIA)
+        self._gravar(f"/settings/set/{self.instancia}", AJUSTES_DA_INSTANCIA)
 
     def _gravar(self, caminho: str, corpo: dict) -> None:
         resposta = self._pedir("POST", caminho, json=corpo)
@@ -100,7 +101,7 @@ class Evolution:
 
     def pedir_qr(self) -> str | None:
         """Imagem do QR em base64 (data URL), ou None se o Evolution ainda não gerou um."""
-        resposta = self._pedir("GET", f"/instance/connect/{INSTANCIA}")
+        resposta = self._pedir("GET", f"/instance/connect/{self.instancia}")
         if not resposta.is_success:
             raise EvolutionFora(f"HTTP {resposta.status_code}")
         dados = _json(resposta)
@@ -114,7 +115,7 @@ class Evolution:
 
     def enviar_texto(self, numero: str, texto: str) -> str | None:
         """Envia um texto e devolve o id da mensagem no WhatsApp. Erro vira EvolutionFora."""
-        resposta = self._pedir("POST", f"/message/sendText/{INSTANCIA}", json={"number": numero, "text": texto})
+        resposta = self._pedir("POST", f"/message/sendText/{self.instancia}", json={"number": numero, "text": texto})
         if not resposta.is_success:
             raise EvolutionFora(f"HTTP {resposta.status_code}")
         dados = _json(resposta)
@@ -124,7 +125,7 @@ class Evolution:
 
     def desconectar(self) -> None:
         """Desliga o número da instância. Já desligado responde erro 400, e isso não é falha."""
-        self._pedir("DELETE", f"/instance/logout/{INSTANCIA}")
+        self._pedir("DELETE", f"/instance/logout/{self.instancia}")
 
 
 def _json(resposta: httpx.Response) -> object:

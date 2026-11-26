@@ -167,6 +167,74 @@ Se a chave do canal vazar, rode `preparar_chaves.ps1` de novo, cole as novas no 
 - **O que vai para o Instinct sai daqui:** o Instinct é um serviço de fora. Tudo o que o Claude manda para ele passa a estar lá.
 - **A chave do canal agora também envia:** quem tiver `CANAL_WHATSAPP_CHAVE` pode mandar mensagem, mas só para você e para o Instinct.
 
+## Várias pessoas no mesmo serviço
+
+Um serviço só atende a equipe inteira. Cada pessoa tem a própria chave, e a chave decide de quem são as
+mensagens, os envios e a agenda. O endereço do serviço é o mesmo para todos.
+
+- **Cada pessoa continua com a própria instância no Evolution**, porque cada uma conecta o próprio número pelo QR.
+- **Cada pessoa tem o próprio banco** em `/data`. "Apagar mensagens" no painel apaga só a caixa de quem entrou.
+- **O Ambiente guarda só o SHA-256 da chave e da senha.** A chave mesmo fica só no PC da pessoa.
+- **Sem `CANAL_PESSOAS`, o serviço roda como uma pessoa só**, com as variáveis de sempre. Implantar o código novo
+  não muda nada até alguém pôr `CANAL_PESSOAS`.
+
+### Pôr uma pessoa nova (exemplo: danilo)
+
+1. **A pessoa gera as chaves no PC dela:**
+
+   ```bash
+   powershell -ExecutionPolicy Bypass -File canal-whatsapp\preparar_chaves.ps1 -EnderecoDoServico https://acelera-so-canal-whatsapp.izkl7m.easypanel.host -Nome danilo
+   ```
+
+   O programa pede para ela guardar a senha do painel e mostra duas linhas (`CANAL_DANILO_CHAVE_HASH=...` e
+   `CANAL_DANILO_SENHA_PAINEL_HASH=...`), que ela manda para quem administra o EasyPanel.
+2. **O administrador cria a instância `canal-danilo` no Manager do Evolution** e copia a chave dela.
+3. **O administrador acrescenta no Ambiente do serviço:**
+
+   ```text
+   CANAL_PESSOAS=davy,danilo
+   CANAL_DANILO_EVOLUTION_TOKEN=(a chave da instância canal-danilo)
+   CANAL_DANILO_CHAVE_HASH=(a linha que a pessoa mandou)
+   CANAL_DANILO_SENHA_PAINEL_HASH=(a linha que a pessoa mandou)
+   CANAL_DANILO_NUMERO=(o número dela, com 55 e DDD)
+   ```
+
+   e implanta. A lista completa de variáveis por pessoa está no `.env.example`.
+4. **A pessoa conecta o número** no `/painel` com a senha dela e instala as ferramentas no PC (`instalar_mcp.ps1`).
+
+### Passar o serviço de hoje para o modo de várias pessoas
+
+As variáveis de uma pessoa só deixam de valer quando `CANAL_PESSOAS` existe. Para o Davy não perder o QR nem
+as mensagens, a parte dele fica assim:
+
+```text
+CANAL_DAVY_INSTANCIA=canal-ia
+CANAL_DAVY_BANCO=/data/canal.db
+CANAL_DAVY_EVOLUTION_TOKEN=(o mesmo valor de EVOLUTION_TOKEN_INSTANCIA)
+CANAL_DAVY_NUMERO=(o mesmo valor de CANAL_NUMERO_ESPERADO)
+CANAL_DAVY_NUMERO_INSTINCT=(o número do Instinct)
+CANAL_DAVY_CONTATOS=(o mesmo valor de CANAL_CONTATOS, se tiver)
+CANAL_DAVY_CONTATOS_WEBHOOK=(o mesmo valor de CANAL_CONTATOS_WEBHOOK, se tiver)
+CANAL_DAVY_CHAVE_HASH=(SHA-256 da chave de leitura atual)
+CANAL_DAVY_SENHA_PAINEL_HASH=(SHA-256 da senha do painel atual)
+```
+
+Para tirar o SHA-256 da chave atual sem mostrar a chave, rode no PowerShell do PC do Davy (a senha do painel
+é igual, trocando a variável pelo valor guardado no gerenciador de senhas):
+
+```powershell
+$s=[Security.Cryptography.SHA256]::Create(); [BitConverter]::ToString($s.ComputeHash([Text.Encoding]::UTF8.GetBytes($env:CANAL_WHATSAPP_CHAVE))).Replace('-','').ToLower()
+```
+
+### O que continua valendo
+
+- **Quem administra o EasyPanel consegue ler as mensagens de todo mundo:** os bancos estão no mesmo volume e as
+  chaves das instâncias, no mesmo Ambiente. Avise a equipe.
+- **Serviço fora do ar é fora do ar para todos.**
+- **O webhook é um só** (`/webhook/evolution`). O campo `instance` do aviso escolhe a pessoa, e o aviso só entra se
+  vier com o segredo DELA. Pela memória da equipe, o Evolution pode só aceitar webhook na criação da instância:
+  se uma pessoa nova conectar e nada chegar, confira o webhook da instância no Manager.
+
 ## Para quem for mexer no código
 
 - Testes: `uv run pytest` nesta pasta. Usam um dublê do Evolution 2.3.7.
