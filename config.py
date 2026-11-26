@@ -19,7 +19,8 @@ NUMERO_INSTINCT_PADRAO = "16508702892"  # o assistente que avisa o Davy; só no 
 INSTANCIA_PADRAO = "canal-ia"
 DONO_PADRAO = "davy"
 INSTINCT = "instinct"
-RESERVADOS = (DONO_PADRAO, INSTINCT)
+DONO = "dono"  # o cliente chama o dono do canal assim: nunca pode ser contato nem pessoa
+RESERVADOS = (DONO_PADRAO, INSTINCT, DONO)
 NOME_DE_CONTATO = re.compile(r"[a-z][a-z0-9_-]{0,29}")  # começa com letra: nunca parece um número
 NOME_DE_INSTANCIA = re.compile(r"[A-Za-z0-9_-]{1,64}")  # vai no caminho da URL do Evolution
 HASH_SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -188,10 +189,11 @@ def _nomes_das_pessoas(ambiente: dict) -> list[str]:
         nome = item.strip().lower()
         if not nome:
             continue
-        if not NOME_DE_CONTATO.fullmatch(nome) or nome == INSTINCT:
-            raise ConfiguracaoInvalida("CANAL_PESSOAS: nomes separados por vírgula (começam com letra; só letras sem acento, números, - e _; 'instinct' é reservado)")
-        if nome in nomes:
-            raise ConfiguracaoInvalida(f"CANAL_PESSOAS: '{nome}' está repetido")
+        if not NOME_DE_CONTATO.fullmatch(nome) or nome in (INSTINCT, DONO):
+            raise ConfiguracaoInvalida("CANAL_PESSOAS: nomes separados por vírgula (começam com letra; só letras sem acento, números, - e _; 'instinct' e 'dono' são reservados)")
+        if any(prefixo_da_pessoa(nome) == prefixo_da_pessoa(outro) for outro in nomes):
+            # "ana-paula" e "ana_paula" leriam as mesmas variáveis CANAL_ANA_PAULA_*
+            raise ConfiguracaoInvalida(f"CANAL_PESSOAS: '{nome}' está repetido (- e _ contam igual)")
         nomes.append(nome)
     return nomes
 
@@ -205,7 +207,7 @@ def _carregar_pessoa(ambiente: dict, nome: str, comuns: dict) -> Config:
     instancia = ambiente.get(p + "INSTANCIA", "").strip() or f"canal-{nome}"
     if not NOME_DE_INSTANCIA.fullmatch(instancia):
         raise ConfiguracaoInvalida(f"{p}INSTANCIA: só letras sem acento, números, - e _")
-    contatos = _contatos(ambiente, p + "CONTATOS", reservados=(nome, INSTINCT))
+    contatos = _contatos(ambiente, p + "CONTATOS", reservados=(nome, INSTINCT, DONO))
     return Config(
         **comuns,
         nome=nome,

@@ -285,6 +285,8 @@ def test_duas_pessoas_com_padroes():
         {"CANAL_PESSOAS": "davy,davy"},
         {"CANAL_PESSOAS": "davy,instinct"},
         {"CANAL_PESSOAS": "davy,josé"},
+        {"CANAL_PESSOAS": "davy,dono"},
+        {"CANAL_PESSOAS": "davy,danilo,ana-paula,ana_paula"},  # mesmo prefixo CANAL_ANA_PAULA_
         {"CANAL_DANILO_CHAVE_HASH": "curta"},
         {"CANAL_DANILO_CHAVE_HASH": None},
         {"CANAL_DANILO_SENHA_PAINEL_HASH": None},
@@ -297,6 +299,7 @@ def test_duas_pessoas_com_padroes():
         {"CANAL_DANILO_EVOLUTION_TOKEN": "token-do-davy"},
         {"CANAL_DANILO_NUMERO": "5511988887777"},
         {"CANAL_DANILO_CONTATOS": "danilo:5511988887777"},  # o próprio nome é reservado
+        {"CANAL_DANILO_CONTATOS": "dono:5511988887777"},  # o cliente chama o dono assim
         {"CANAL_DANILO_CONTATOS_WEBHOOK": "lisa"},
     ],
 )
@@ -304,3 +307,10 @@ def test_configuracao_que_misturaria_pessoas_nao_sobe(mudanca):
     with pytest.raises(ConfiguracaoInvalida) as erro:
         carregar_pessoas(ambiente_de_duas_pessoas(**mudanca))
     assert "token-do-davy" not in str(erro.value) and "5511988887777" not in str(erro.value)
+
+
+def test_prefixo_das_variaveis_bate_com_o_gerador_de_chave():
+    # O gerar_minha_chave.ps1 do kit da equipe imprime CANAL_ANA_PAULA_CHAVE_HASH para -Nome ana-paula.
+    from config import prefixo_da_pessoa
+
+    assert prefixo_da_pessoa("ana-paula") == "CANAL_ANA_PAULA_"
